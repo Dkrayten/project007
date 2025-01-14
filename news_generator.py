@@ -1,188 +1,231 @@
 import pika
 import json
 import random
-import time
 import logging
+import socket
+import time
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, Any, Optional
 
-class NewsGenerator:
-    def __init__(self):
-        # äâãøú îéìåú îôúç ñôöéôéåú ìëì ÷èâåøéä
-        self.category_keywords = {
-            "Technology": [
-                "innovation", "artificial intelligence", 
-                "machine learning", "tech breakthrough", 
-                "digital transformation"
-            ],
-            "Business": [
-                "market trends", "startup", "investment", 
-                "economic growth", "corporate strategy"
-            ],
-            "World": [
-                "global politics", "international relations", 
-                "diplomacy", "geopolitical", "world affairs"
-            ],
-            "Science": [
-                "research", "discovery", "scientific breakthrough", 
-                "innovation", "academic research"
-            ]
-        }
+class RobustNewsPublisher:
+    def __init__(self, 
+                 host: str = 'localhost', 
+                 port: int = 5672, 
+                 max_retries: int = 10):
+        """
+        Comprehensive RabbitMQ News Publisher with maximum reliability
         
-        # äâãøú ÷èâåøéåú
-        self.categories = list(self.category_keywords.keys())
-        
-        # äâãøú ìåâø
+        Args:
+            host (str): RabbitMQ server host
+            port (int): RabbitMQ server port
+            max_retries (int): Maximum connection retry attempts
+        """
+        # Logging configuration
         logging.basicConfig(
-            level=logging.INFO, 
-            format='%(asctime)s - %(levelname)s - %(message)s'
+            level=logging.DEBUG,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            filename='news_publisher.log'
         )
         self.logger = logging.getLogger(__name__)
+        
+        # Connection parameters
+        self.host = host
+        self.port = port
+        self.max_retries = max_retries
+        
+        # Validation checks
+        self._validate_network_prerequisites()
     
-    def _generate_keywords(self, category: str) -> List[str]:
+    def _validate_network_prerequisites(self):
         """
-        Generate dynamic keywords based on the news category
-        
-        Args:
-            category (str): News category
-        
-        Returns:
-            List[str]: List of relevant keywords
-        """
-        # áçéøú îéìåú îôúç øìååðèéåú ì÷èâåøéä
-        category_specific_keywords = self.category_keywords.get(category, [])
-        
-        # áçéøú 2-3 îéìåú îôúç øðãåîìéåú
-        return random.sample(category_specific_keywords, min(3, len(category_specific_keywords)))
-    
-    def generate_news_item(self) -> Dict[str, any]:
-        """
-        Generate a comprehensive news item with dynamic content
-        
-        Returns:
-            Dict[str, any]: News item with all required fields
-        """
-        # áçéøú ÷èâåøéä øðãåîìéú
-        category = random.choice(self.categories)
-        
-        news_item = {
-            "title": self._generate_title(category),
-            "content": self._generate_content(category),
-            "category": category,
-            "timestamp": datetime.now().isoformat(),
-            "keywords": self._generate_keywords(category)
-        }
-        return news_item
-    
-    def _generate_title(self, category: str) -> str:
-        """
-        Generate a title specific to the category
-        
-        Args:
-            category (str): News category
-        
-        Returns:
-            str: Generated news title
-        """
-        title_templates = {
-            "Technology": [
-                "Breaking: {} Revolutionizes Tech Industry",
-                "New AI Breakthrough in {}",
-                "Tech Giant Unveils Innovative Solution"
-            ],
-            "Business": [
-                "Market Shift: {} Disrupts Economic Landscape",
-                "Startup Secures Major Investment in {}",
-                "Global Business Trends Emerging"
-            ],
-            "World": [
-                "Diplomatic Breakthrough in {}",
-                "Global Leaders Discuss Critical Issues",
-                "International Relations Evolve"
-            ],
-            "Science": [
-                "Scientific Breakthrough in {}",
-                "Researchers Uncover Groundbreaking Discovery",
-                "New Research Challenges Existing Theories"
-            ]
-        }
-        
-        return random.choice(title_templates.get(category, [])).format(category)
-    
-    def _generate_content(self, category: str) -> str:
-        """
-        Generate content based on the category
-        
-        Args:
-            category (str): News category
-        
-        Returns:
-            str: Generated news content
-        """
-        content_templates = {
-            "Technology": "Latest advancements in {} are pushing the boundaries of innovation...",
-            "Business": "The {} sector is experiencing significant transformations...",
-            "World": "Recent developments in {} highlight the complex nature of global politics...",
-            "Science": "Groundbreaking research in {} promises to revolutionize our understanding..."
-        }
-        
-        return content_templates.get(category, "").format(category)
-    
-    def publish_news(self):
-        """
-        Publish news with dynamic routing key based on category
+        Perform comprehensive pre-connection network validations
         """
         try:
-            # RabbitMQ connection setup
-            connection = pika.BlockingConnection(
-                pika.ConnectionParameters('localhost')
-            )
+            # Check network socket
+            test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_socket.settimeout(5)
+            result = test_socket.connect_ex((self.host, self.port))
+            
+            if result != 0:
+                raise ConnectionError(f"Port {self.port} is not accessible")
+            
+            test_socket.close()
+            self.logger.info(f"Network prerequisites validated for {self.host}:{self.port}")
+        
+        except Exception as e:
+            self.logger.critical(f"Network validation failed: {e}")
+            raise
+    
+    def _create_connection_parameters(self) -> pika.ConnectionParameters:
+        """
+        Create highly configurable and secure connection parameters
+        
+        Returns:
+            pika.ConnectionParameters: Robust connection configuration
+        """
+        credentials = pika.PlainCredentials(
+            username='guest', 
+            password='guest',
+            erase_on_connect=True  # Security enhancement
+        )
+        
+        return pika.ConnectionParameters(
+            host=self.host,
+            port=self.port,
+            virtual_host='/',
+            credentials=credentials,
+            connection_attempts=self.max_retries,
+            socket_timeout=10,
+            heartbeat=600,  # 10-minute heartbeat
+            retry_delay=3,
+            blocked_connection_timeout=300  # 5-minute block timeout
+        )
+    
+    def establish_connection(self) -> Optional[pika.BlockingConnection]:
+        """
+        Establish a connection with multi-layered error handling
+        
+        Returns:
+            Optional[pika.BlockingConnection]: Verified RabbitMQ connection
+        """
+        connection = None
+        for attempt in range(self.max_retries):
+            try:
+                # Create connection parameters
+                connection_params = self._create_connection_parameters()
+                
+                # Attempt connection
+                connection = pika.BlockingConnection(connection_params)
+                
+                # Verify connection
+                channel = connection.channel()
+                channel.basic_qos(prefetch_count=1)
+                
+                # Declare exchange with comprehensive configuration
+                channel.exchange_declare(
+                    exchange='news_exchange',
+                    exchange_type='topic',
+                    durable=True,
+                    auto_delete=False
+                )
+                
+                self.logger.info(f"Successfully established connection (Attempt {attempt + 1})")
+                return connection
+            
+            except (
+                pika.exceptions.AMQPConnectionError, 
+                pika.exceptions.AMQPChannelError,
+                socket.error
+            ) as e:
+                self.logger.warning(
+                    f"Connection attempt {attempt + 1} failed: {e}. "
+                    f"Retrying in 3 seconds..."
+                )
+                time.sleep(3)
+            
+            except Exception as unexpected_error:
+                self.logger.critical(f"Unexpected connection error: {unexpected_error}")
+                break
+        
+        self.logger.error("Failed to establish RabbitMQ connection after multiple attempts")
+        return None
+    
+    def generate_news_item(self) -> Dict[str, Any]:
+        """
+        Generate a comprehensive and realistic news item
+        
+        Returns:
+            Dict[str, Any]: Detailed news item
+        """
+        categories = ['Technology', 'Business', 'Science', 'World']
+        category = random.choice(categories)
+        
+        return {
+            'id': random.randint(1000, 9999),
+            'title': f"Breaking News: {category} Breakthrough",
+            'content': f"Detailed report on latest developments in {category}",
+            'category': category,
+            'timestamp': datetime.now().isoformat(),
+            'keywords': [
+                random.choice(['innovation', 'research', 'discovery']),
+                category.lower()
+            ],
+            'source': 'NewsGenerator'
+        }
+    
+    def publish_message(self, message: Dict[str, Any]):
+        """
+        Publish message with guaranteed delivery
+        
+        Args:
+            message (Dict[str, Any]): News item to publish
+        """
+        connection = None
+        try:
+            # Establish connection
+            connection = self.establish_connection()
+            
+            if not connection:
+                raise ConnectionError("Could not establish RabbitMQ connection")
+            
+            # Create channel
             channel = connection.channel()
             
-            # Declare exchange
-            channel.exchange_declare(
-                exchange='news_exchange', 
-                exchange_type='topic'
-            )
-            print("Exchange 'news_exchange' declared successfully!")
-            # Generate and publish news
-            news_item = self.generate_news_item()
+            # Serialize message
+            message_body = json.dumps(message).encode('utf-8')
             
-            # Dynamic routing key based on category
-            routing_key = f"news.{news_item['category'].lower()}"
+            # Publish with confirmation
+            channel.confirm_delivery()
             
-            channel.basic_publish(
+            result = channel.basic_publish(
                 exchange='news_exchange',
-                routing_key=routing_key,
-                body=json.dumps(news_item),
+                routing_key=f"news.{message.get('category', 'general')}",
+                body=message_body,
                 properties=pika.BasicProperties(
-                    delivery_mode=2  # Persistent message
+                    delivery_mode=2,  # Persistent message
+                    content_type='application/json',
+                    timestamp=int(datetime.now().timestamp())
                 )
             )
             
-            self.logger.info(f"Published news: {news_item['title']} with routing key: {routing_key}")
+            if result:
+                self.logger.info(f"Successfully published: {message.get('title')}")
+            else:
+                self.logger.warning("Message publication not confirmed")
         
         except Exception as e:
-            self.logger.error(f"Failed to publish news: {e}")
+            self.logger.error(f"Publication failed: {e}")
+        
         finally:
             # Ensure connection closure
-            if 'connection' in locals() and not connection.is_closed:
+            if connection and not connection.is_closed:
                 connection.close()
+    
+    def start_news_generation(self, interval: float = 5):
+        """
+        Continuously generate and publish news with error resilience
+        
+        Args:
+            interval (float): Time between news generations
+        """
+        self.logger.info("Starting robust news generation...")
+        
+        try:
+            while True:
+                try:
+                    news_item = self.generate_news_item()
+                    self.publish_message(news_item)
+                except Exception as item_error:
+                    self.logger.error(f"News generation error: {item_error}")
+                
+                time.sleep(interval)
+        
+        except KeyboardInterrupt:
+            self.logger.info("News generation stopped by user")
 
 def main():
-    """
-    Main execution point for the News Generator
-    Publishes news every 5-10 seconds
-    """
-    generator = NewsGenerator()
-    
-    try:
-        while True:
-            generator.publish_news()
-            time.sleep(random.uniform(5, 10))
-    
-    except KeyboardInterrupt:
-        print("News generation stopped.")
+    publisher = RobustNewsPublisher()
+    publisher.start_news_generation()
 
 if __name__ == "__main__":
     main()
