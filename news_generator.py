@@ -1,98 +1,188 @@
-
 import pika
 import json
 import random
 import time
+import logging
 from datetime import datetime
+from typing import List, Dict
 
 class NewsGenerator:
     def __init__(self):
-        # RabbitMQ Connection Parameters
-        self.connection_params = pika.ConnectionParameters('localhost')
-        self.connection = None
-        self.channel = None
-
-        # News Categories
-        self.categories = [
-            "Technology",
-            "Business",
-            "World",
-            "Science"
-        ]
-
-    def generate_news_item(self):
-        """Generate a simulated news item"""
-        return {
-            "title": self._generate_title(),
-            "content": self._generate_content(),
-            "category": random.choice(self.categories),
-            "timestamp": datetime.now().isoformat(),
-            "keywords": self._generate_keywords()
+        # הגדרת מילות מפתח ספציפיות לכל קטגוריה
+        self.category_keywords = {
+            "Technology": [
+                "innovation", "artificial intelligence", 
+                "machine learning", "tech breakthrough", 
+                "digital transformation"
+            ],
+            "Business": [
+                "market trends", "startup", "investment", 
+                "economic growth", "corporate strategy"
+            ],
+            "World": [
+                "global politics", "international relations", 
+                "diplomacy", "geopolitical", "world affairs"
+            ],
+            "Science": [
+                "research", "discovery", "scientific breakthrough", 
+                "innovation", "academic research"
+            ]
         }
-
-    def _generate_title(self):
-        """Generate a random news title"""
-        title_templates = [
-            "Breaking: {} Revolutionizes {}",
-            "New Study Reveals Surprising {} in {}",
-            "Major Breakthrough in {} Sector"
-        ]
-        return random.choice(title_templates).format(
-            random.choice(self.categories),
-            random.choice(["Industry", "Research", "Technology"])
+        
+        # הגדרת קטגוריות
+        self.categories = list(self.category_keywords.keys())
+        
+        # הגדרת לוגר
+        logging.basicConfig(
+            level=logging.INFO, 
+            format='%(asctime)s - %(levelname)s - %(message)s'
         )
-
-    def _generate_content(self):
-        """Generate lorem ipsum style content"""
-        # Placeholder for more sophisticated content generation
-        return f"Detailed report about recent developments in {random.choice(self.categories)} sector."
-
-    def _generate_keywords(self):
-        """Generate relevant keywords"""
-        return [
-            random.choice(["innovation", "breakthrough", "research", "development", "technology"]),
-            random.choice(self.categories.lower())
-        ]
-
-    def connect_to_rabbitmq(self):
-        """Establish connection to RabbitMQ"""
-        self.connection = pika.BlockingConnection(self.connection_params)
-        self.channel = self.connection.channel()
-
-        # Declare a topic exchange
-        self.channel.exchange_declare(exchange='news_exchange', exchange_type='topic')
-
+        self.logger = logging.getLogger(__name__)
+    
+    def _generate_keywords(self, category: str) -> List[str]:
+        """
+        Generate dynamic keywords based on the news category
+        
+        Args:
+            category (str): News category
+        
+        Returns:
+            List[str]: List of relevant keywords
+        """
+        # בחירת מילות מפתח רלוונטיות לקטגוריה
+        category_specific_keywords = self.category_keywords.get(category, [])
+        
+        # בחירת 2-3 מילות מפתח רנדומליות
+        return random.sample(category_specific_keywords, min(3, len(category_specific_keywords)))
+    
+    def generate_news_item(self) -> Dict[str, any]:
+        """
+        Generate a comprehensive news item with dynamic content
+        
+        Returns:
+            Dict[str, any]: News item with all required fields
+        """
+        # בחירת קטגוריה רנדומלית
+        category = random.choice(self.categories)
+        
+        news_item = {
+            "title": self._generate_title(category),
+            "content": self._generate_content(category),
+            "category": category,
+            "timestamp": datetime.now().isoformat(),
+            "keywords": self._generate_keywords(category)
+        }
+        return news_item
+    
+    def _generate_title(self, category: str) -> str:
+        """
+        Generate a title specific to the category
+        
+        Args:
+            category (str): News category
+        
+        Returns:
+            str: Generated news title
+        """
+        title_templates = {
+            "Technology": [
+                "Breaking: {} Revolutionizes Tech Industry",
+                "New AI Breakthrough in {}",
+                "Tech Giant Unveils Innovative Solution"
+            ],
+            "Business": [
+                "Market Shift: {} Disrupts Economic Landscape",
+                "Startup Secures Major Investment in {}",
+                "Global Business Trends Emerging"
+            ],
+            "World": [
+                "Diplomatic Breakthrough in {}",
+                "Global Leaders Discuss Critical Issues",
+                "International Relations Evolve"
+            ],
+            "Science": [
+                "Scientific Breakthrough in {}",
+                "Researchers Uncover Groundbreaking Discovery",
+                "New Research Challenges Existing Theories"
+            ]
+        }
+        
+        return random.choice(title_templates.get(category, [])).format(category)
+    
+    def _generate_content(self, category: str) -> str:
+        """
+        Generate content based on the category
+        
+        Args:
+            category (str): News category
+        
+        Returns:
+            str: Generated news content
+        """
+        content_templates = {
+            "Technology": "Latest advancements in {} are pushing the boundaries of innovation...",
+            "Business": "The {} sector is experiencing significant transformations...",
+            "World": "Recent developments in {} highlight the complex nature of global politics...",
+            "Science": "Groundbreaking research in {} promises to revolutionize our understanding..."
+        }
+        
+        return content_templates.get(category, "").format(category)
+    
     def publish_news(self):
-        """Publish news items to RabbitMQ"""
-        while True:
-            news_item = self.generate_news_item()
-
-            # Convert to JSON
-            message = json.dumps(news_item)
-
-            # Publish to RabbitMQ
-            self.channel.basic_publish(
-                exchange='news_exchange',
-                routing_key='news.generated',
-                body=message
-            )
-
-            print(f"Published news: {news_item['title']}")
-
-            # Random interval between 5-10 seconds
-            time.sleep(random.uniform(5, 10))
-
-    def start(self):
-        """Start the news generation process"""
+        """
+        Publish news with dynamic routing key based on category
+        """
         try:
-            self.connect_to_rabbitmq()
-            self.publish_news()
+            # RabbitMQ connection setup
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters('localhost')
+            )
+            channel = connection.channel()
+            
+            # Declare exchange
+            channel.exchange_declare(
+                exchange='news_exchange', 
+                exchange_type='topic'
+            )
+            
+            # Generate and publish news
+            news_item = self.generate_news_item()
+            
+            # Dynamic routing key based on category
+            routing_key = f"news.{news_item['category'].lower()}"
+            
+            channel.basic_publish(
+                exchange='news_exchange',
+                routing_key=routing_key,
+                body=json.dumps(news_item),
+                properties=pika.BasicProperties(
+                    delivery_mode=2  # Persistent message
+                )
+            )
+            
+            self.logger.info(f"Published news: {news_item['title']} with routing key: {routing_key}")
+        
         except Exception as e:
-            print(f"Error in news generation: {e}")
+            self.logger.error(f"Failed to publish news: {e}")
         finally:
-            if self.connection:
-                self.connection.close()
+            # Ensure connection closure
+            if 'connection' in locals() and not connection.is_closed:
+                connection.close()
+
+def main():
+    """
+    Main execution point for the News Generator
+    Publishes news every 5-10 seconds
+    """
+    generator = NewsGenerator()
+    
+    try:
+        while True:
+            generator.publish_news()
+            time.sleep(random.uniform(5, 10))
+    
+    except KeyboardInterrupt:
+        print("News generation stopped.")
 
 if __name__ == "__main__":
-    generator = NewsGenerator()
-    generator.start()
+    main()
