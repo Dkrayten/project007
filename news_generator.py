@@ -8,7 +8,7 @@ from typing import List, Dict
 
 class NewsGenerator:
     def __init__(self):
-        # äâãøú îéìåú îôúç ñôöéôéåú ìëì ÷èâåøéä
+        # Ã¤Ã¢Ã£Ã¸Ãº Ã®Ã©Ã¬Ã¥Ãº Ã®Ã´ÃºÃ§ Ã±Ã´Ã¶Ã©Ã´Ã©Ã¥Ãº Ã¬Ã«Ã¬ Ã·Ã¨Ã¢Ã¥Ã¸Ã©Ã¤
         self.category_keywords = {
             "Technology": [
                 "innovation", "artificial intelligence", 
@@ -29,10 +29,10 @@ class NewsGenerator:
             ]
         }
         
-        # äâãøú ÷èâåøéåú
+        # Ã¤Ã¢Ã£Ã¸Ãº Ã·Ã¨Ã¢Ã¥Ã¸Ã©Ã¥Ãº
         self.categories = list(self.category_keywords.keys())
         
-        # äâãøú ìåâø
+        # Ã¤Ã¢Ã£Ã¸Ãº Ã¬Ã¥Ã¢Ã¸
         logging.basicConfig(
             level=logging.INFO, 
             format='%(asctime)s - %(levelname)s - %(message)s'
@@ -49,10 +49,10 @@ class NewsGenerator:
         Returns:
             List[str]: List of relevant keywords
         """
-        # áçéøú îéìåú îôúç øìååğèéåú ì÷èâåøéä
+        # Ã¡Ã§Ã©Ã¸Ãº Ã®Ã©Ã¬Ã¥Ãº Ã®Ã´ÃºÃ§ Ã¸Ã¬Ã¥Ã¥Ã°Ã¨Ã©Ã¥Ãº Ã¬Ã·Ã¨Ã¢Ã¥Ã¸Ã©Ã¤
         category_specific_keywords = self.category_keywords.get(category, [])
         
-        # áçéøú 2-3 îéìåú îôúç øğãåîìéåú
+        # Ã¡Ã§Ã©Ã¸Ãº 2-3 Ã®Ã©Ã¬Ã¥Ãº Ã®Ã´ÃºÃ§ Ã¸Ã°Ã£Ã¥Ã®Ã¬Ã©Ã¥Ãº
         return random.sample(category_specific_keywords, min(3, len(category_specific_keywords)))
     
     def generate_news_item(self) -> Dict[str, any]:
@@ -62,7 +62,7 @@ class NewsGenerator:
         Returns:
             Dict[str, any]: News item with all required fields
         """
-        # áçéøú ÷èâåøéä øğãåîìéú
+        # Ã¡Ã§Ã©Ã¸Ãº Ã·Ã¨Ã¢Ã¥Ã¸Ã©Ã¤ Ã¸Ã°Ã£Ã¥Ã®Ã¬Ã©Ãº
         category = random.choice(self.categories)
         
         news_item = {
@@ -144,7 +144,7 @@ class NewsGenerator:
                 exchange='news_exchange', 
                 exchange_type='topic'
             )
-            
+            print("Exchange 'news_exchange' declared successfully!")
             # Generate and publish news
             news_item = self.generate_news_item()
             
